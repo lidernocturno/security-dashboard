@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSH Attempts - VPS Security Dashboard</title>
+<link rel="stylesheet" href="/shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="page-header">
+  <div class="page-header-left">
+    <div>
+      <div class="page-breadcrumb"><a href="/">Dashboard</a> / SSH Attempts</div>
+      <div class="page-title">SSH ATTEMPTS LOG</div>
+      <div class="page-subtitle">Complete timeline of SSH access attempts</div>
+    </div>
+  </div>
+  <a href="/" class="btn-back">&larr; Dashboard</a>
+</div>
+<div class="page-content">
+  <div class="stats-row" id="stats"></div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><span class="card-title">Hourly Timeline</span></div>
+    <div style="padding:16px;height:250px;"><canvas id="timeline"></canvas></div>
+  </div>
+
+  <input type="text" class="search-bar" id="searchBar" placeholder="Search by IP, user, method...">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Recent Attempts</span>
+      <span id="resultCount" style="color:var(--text-dim);font-size:11px;"></span>
+    </div>
+    <div style="max-height:60vh;overflow-y:auto;">
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>IP</th><th>User</th><th>Method</th><th>Severity</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="page-footer">VPS Security Dashboard | <a href="/">Back to Dashboard</a></div>
+<script>
+const SEV = {'SSH Brute Force (password)':'high','SSH Invalid User':'medium','SSH Connection Probe':'low','SSH Pre-auth Disconnect':'low'};
+async function load() {
+  const data = await (await fetch('/data/attacks.json?t='+Date.now())).json();
+  const attacks = (data.attacks||[]).slice().reverse();
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-red)">${data.summary.total_ssh_attempts.toLocaleString()}</div><div class="stat-label">Total Attempts</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-orange)">${attacks.length.toLocaleString()}</div><div class="stat-label">In Log</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-cyan)">${data.methods.length}</div><div class="stat-label">Methods</div></div>
+  `;
+
+  // Timeline
+  const hourly = data.hourly_timeline;
+  new Chart(document.getElementById('timeline'), {
+    type: 'line',
+    data: {
+      labels: hourly.map(h => { const d = new Date(h.hour); return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',hour12:false}); }),
+      datasets: [{ data: hourly.map(h=>h.count), borderColor: '#00ccff', backgroundColor: '#00ccff20', fill: true, tension: 0.3, pointRadius: 1, borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#555577', maxTicksLimit: 12, font:{size:10} }, grid: { color: '#222244' } }, y: { ticks: { color: '#555577' }, grid: { color: '#222244' }, beginAtZero: true } }
+    }
+  });
+
+  function render(list) {
+    document.getElementById('resultCount').textContent = `${list.length} entries`;
+    document.getElementById('tableBody').innerHTML = list.slice(0, 500).map(a => {
+      const time = a.timestamp ? new Date(a.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}) : '-';
+      const sev = SEV[a.method] || 'low';
+      return `<tr><td style="color:var(--text-dim);white-space:nowrap">${time}</td><td class="ip">${a.ip}</td><td>${a.user||'-'}</td><td>${a.method||'-'}</td><td><span class="badge badge-${sev}">${sev}</span></td></tr>`;
+    }).join('');
+  }
+  render(attacks);
+
+  document.getElementById('searchBar').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    render(attacks.filter(a => (a.ip||'').includes(q) || (a.user||'').toLowerCase().includes(q) || (a.method||'').toLowerCase().includes(q)));
+  });
+}
+load();
+</script>
+</body>
+</html>

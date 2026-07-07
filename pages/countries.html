@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Countries - VPS Security Dashboard</title>
+<link rel="stylesheet" href="/shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="page-header">
+  <div class="page-header-left">
+    <div>
+      <div class="page-breadcrumb"><a href="/">Dashboard</a> / Countries</div>
+      <div class="page-title">ATTACKING COUNTRIES</div>
+      <div class="page-subtitle">Geographic breakdown of attack origins</div>
+    </div>
+  </div>
+  <a href="/" class="btn-back">&larr; Dashboard</a>
+</div>
+
+<div class="page-content">
+  <div class="stats-row" id="stats"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Attacks by Country</span></div>
+      <div style="padding:16px;height:350px;"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Distribution</span></div>
+      <div style="padding:16px;height:350px;"><canvas id="pieChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Country Details</span>
+    </div>
+    <div style="max-height:60vh;overflow-y:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Country</th>
+            <th>Attacks</th>
+            <th>% of Total</th>
+            <th>Distribution</th>
+            <th>Top Attacker IPs</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="page-footer">VPS Security Dashboard | <a href="/">Back to Dashboard</a></div>
+
+<script>
+const COLORS = ['#ff4444','#ff8800','#ffcc00','#00ff88','#00ccff','#4488ff','#aa44ff','#ff44aa','#88ff44','#44ffaa'];
+async function load() {
+  const resp = await fetch('/data/attacks.json?t=' + Date.now());
+  const data = await resp.json();
+  const countries = data.countries;
+  const topIps = data.top_ips;
+  const total = countries.reduce((s, c) => s + c.attacks, 0);
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-cyan)">${countries.length}</div><div class="stat-label">Countries</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-red)">${total.toLocaleString()}</div><div class="stat-label">Total Attacks</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-orange)">${countries[0]?.flag || ''} ${countries[0]?.name || '?'}</div><div class="stat-label">#1 Attacker Country</div></div>
+  `;
+
+  // Bar chart
+  new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: countries.slice(0,10).map(c => c.flag + ' ' + c.name),
+      datasets: [{
+        data: countries.slice(0,10).map(c => c.attacks),
+        backgroundColor: COLORS.map(c => c + '88'),
+        borderColor: COLORS,
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#555577' }, grid: { color: '#222244' } },
+        y: { ticks: { color: '#8888aa', font: { size: 11 } }, grid: { display: false } },
+      }
+    }
+  });
+
+  // Pie chart
+  new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: countries.slice(0,8).map(c => c.name),
+      datasets: [{ data: countries.slice(0,8).map(c => c.attacks), backgroundColor: COLORS.slice(0,8).map(c=>c+'88'), borderColor: COLORS.slice(0,8), borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '50%',
+      plugins: { legend: { position: 'right', labels: { color: '#8888aa', font: { family: 'monospace', size: 11 } } } }
+    }
+  });
+
+  // Table with IPs per country
+  document.getElementById('tableBody').innerHTML = countries.map((c, i) => {
+    const countryIps = topIps.filter(ip => ip.country === c.code).slice(0, 3);
+    const ipsHtml = countryIps.map(ip => `<span class="ip">${ip.ip}</span> (${ip.attempts})`).join(', ') || '-';
+    const barPct = (c.attacks / countries[0].attacks * 100).toFixed(0);
+    const color = COLORS[i % COLORS.length];
+    return `<tr>
+      <td>${i+1}</td>
+      <td><span class="flag">${c.flag}</span> <b>${c.name}</b> <span style="color:var(--text-dim)">(${c.code})</span></td>
+      <td class="count-high">${c.attacks.toLocaleString()}</td>
+      <td>${c.percent}%</td>
+      <td><div class="bar-track" style="width:200px"><div class="bar-fill" style="width:${barPct}%;background:${color}"></div></div></td>
+      <td style="font-size:11px">${ipsHtml}</td>
+    </tr>`;
+  }).join('');
+}
+load();
+</script>
+</body>
+</html>

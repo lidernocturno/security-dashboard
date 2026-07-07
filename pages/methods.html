@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attack Methods - VPS Security Dashboard</title>
+<link rel="stylesheet" href="/shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="page-header">
+  <div class="page-header-left">
+    <div>
+      <div class="page-breadcrumb"><a href="/">Dashboard</a> / Attack Methods</div>
+      <div class="page-title">ATTACK METHODS</div>
+      <div class="page-subtitle">Types of attacks detected against your VPS</div>
+    </div>
+  </div>
+  <a href="/" class="btn-back">&larr; Dashboard</a>
+</div>
+
+<div class="page-content">
+  <div class="stats-row" id="stats"></div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header"><span class="card-title">Method Breakdown</span></div>
+    <div style="padding:16px;height:300px;"><canvas id="methodChart"></canvas></div>
+  </div>
+
+  <h3 style="color:var(--accent-cyan);margin-bottom:16px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Detailed Technique Pages</h3>
+  <div class="links-grid" id="techniqueLinks"></div>
+</div>
+
+<div class="page-footer">VPS Security Dashboard | <a href="/">Back to Dashboard</a></div>
+
+<script>
+const TECHNIQUES = [
+  { id: 'ssh-brute-force', name: 'SSH Brute Force', icon: '&#x1f511;', mitre: 'T1110.001', severity: 'high',
+    desc: 'Automated password guessing against SSH. The most common attack on any internet-facing server.' },
+  { id: 'ssh-invalid-user', name: 'SSH Invalid User / User Enumeration', icon: '&#x1f464;', mitre: 'T1078', severity: 'medium',
+    desc: 'Attempting login with non-existent usernames to discover valid accounts.' },
+  { id: 'ssh-connection-probe', name: 'SSH Connection Probe / Banner Grab', icon: '&#x1f50d;', mitre: 'T1595.002', severity: 'low',
+    desc: 'Connecting to SSH to fingerprint version and check for known vulnerabilities.' },
+  { id: 'credential-stuffing', name: 'Credential Stuffing', icon: '&#x1f4cb;', mitre: 'T1110.004', severity: 'high',
+    desc: 'Using leaked credentials from data breaches to attempt login.' },
+  { id: 'port-scanning', name: 'Port Scanning / Network Reconnaissance', icon: '&#x1f6f0;', mitre: 'T1046', severity: 'medium',
+    desc: 'Scanning all ports to discover running services and attack surface.' },
+  { id: 'ssh-cve-exploitation', name: 'SSH CVE Exploitation', icon: '&#x1f4a3;', mitre: 'T1190', severity: 'critical',
+    desc: 'Exploiting known vulnerabilities in SSH like regreSSHion (CVE-2024-6387).' },
+];
+
+async function load() {
+  const resp = await fetch('/data/attacks.json?t=' + Date.now());
+  const data = await resp.json();
+  const methods = data.methods;
+  const total = methods.reduce((s, m) => s + m.count, 0);
+  const COLORS = ['#ff4444','#ff8800','#ffcc00','#00ccff','#aa44ff','#00ff88'];
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-red)">${total.toLocaleString()}</div><div class="stat-label">Total Attacks</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-orange)">${methods.length}</div><div class="stat-label">Methods Detected</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-yellow)">${methods[0]?.method?.replace('SSH ','') || '?'}</div><div class="stat-label">Most Common</div></div>
+  `;
+
+  new Chart(document.getElementById('methodChart'), {
+    type: 'bar',
+    data: {
+      labels: methods.map(m => m.method),
+      datasets: [{ data: methods.map(m => m.count), backgroundColor: COLORS.map(c=>c+'88'), borderColor: COLORS, borderWidth: 1 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8888aa', font: { size: 10 }, maxRotation: 15 }, grid: { color: '#222244' } },
+        y: { ticks: { color: '#555577' }, grid: { color: '#222244' }, beginAtZero: true },
+      }
+    }
+  });
+
+  // Technique cards
+  document.getElementById('techniqueLinks').innerHTML = TECHNIQUES.map(t => `
+    <a href="/pages/techniques/${t.id}.html" class="link-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:24px;">${t.icon}</span>
+        <div>
+          <div class="link-card-title">${t.name}</div>
+          <span class="badge badge-${t.severity}">${t.severity}</span>
+          <span style="color:var(--accent-purple);font-size:10px;margin-left:6px;">MITRE ${t.mitre}</span>
+        </div>
+      </div>
+      <div class="link-card-desc">${t.desc}</div>
+    </a>
+  `).join('');
+}
+load();
+</script>
+</body>
+</html>

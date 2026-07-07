@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attackers - VPS Security Dashboard</title>
+<link rel="stylesheet" href="/shared.css">
+</head>
+<body>
+<div class="page-header">
+  <div class="page-header-left">
+    <div>
+      <div class="page-breadcrumb"><a href="/">Dashboard</a> / Attackers</div>
+      <div class="page-title">UNIQUE ATTACKERS</div>
+      <div class="page-subtitle">Every IP that has attempted to access your VPS</div>
+    </div>
+  </div>
+  <a href="/" class="btn-back">&larr; Dashboard</a>
+</div>
+
+<div class="page-content">
+  <div class="stats-row" id="stats"></div>
+
+  <input type="text" class="search-bar" id="searchBar" placeholder="Search by IP, country, city, organization...">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">All Attackers</span>
+      <span id="resultCount" style="color:var(--text-dim);font-size:11px;"></span>
+    </div>
+    <div style="max-height:70vh;overflow-y:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>IP Address</th>
+            <th>Country</th>
+            <th>City</th>
+            <th>Organization</th>
+            <th>ASN</th>
+            <th>Attempts</th>
+            <th>Severity</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="page-footer">VPS Security Dashboard | <a href="/">Back to Dashboard</a></div>
+
+<script>
+async function load() {
+  const resp = await fetch('/data/attacks.json?t=' + Date.now());
+  const data = await resp.json();
+  const ips = data.top_ips;
+
+  // Stats
+  const totalAttempts = ips.reduce((s, a) => s + a.attempts, 0);
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-orange)">${ips.length}</div><div class="stat-label">Unique IPs</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-red)">${totalAttempts.toLocaleString()}</div><div class="stat-label">Total Attempts</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-cyan)">${data.summary.countries_attacking}</div><div class="stat-label">Countries</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent-green)">${data.summary.fail2ban_total_banned}</div><div class="stat-label">Banned by Fail2ban</div></div>
+  `;
+
+  function render(filtered) {
+    document.getElementById('resultCount').textContent = `${filtered.length} results`;
+    document.getElementById('tableBody').innerHTML = filtered.map((a, i) => {
+      const sev = a.attempts > 500 ? 'critical' : a.attempts > 100 ? 'high' : a.attempts > 20 ? 'medium' : 'low';
+      const countClass = a.attempts > 500 ? 'count-high' : a.attempts > 100 ? 'count-med' : 'count-low';
+      return `<tr>
+        <td>${i+1}</td>
+        <td class="ip">${a.ip}</td>
+        <td><span class="flag">${a.flag || ''}</span> ${a.country_name || a.country || '??'}</td>
+        <td>${a.city || '-'}</td>
+        <td style="color:var(--text-secondary)">${a.org || '-'}</td>
+        <td style="color:var(--text-dim)">${a.asn || '-'}</td>
+        <td class="${countClass}">${a.attempts.toLocaleString()}</td>
+        <td><span class="badge badge-${sev}">${sev}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  render(ips);
+
+  document.getElementById('searchBar').addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase();
+    const filtered = ips.filter(a =>
+      (a.ip || '').toLowerCase().includes(q) ||
+      (a.country_name || '').toLowerCase().includes(q) ||
+      (a.city || '').toLowerCase().includes(q) ||
+      (a.org || '').toLowerCase().includes(q) ||
+      (a.asn || '').toLowerCase().includes(q)
+    );
+    render(filtered);
+  });
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPS Security Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg-primary: #0a0a1a;
+  --bg-secondary: #111127;
+  --bg-card: #161633;
+  --bg-card-hover: #1a1a40;
+  --text-primary: #e0e0f0;
+  --text-secondary: #8888aa;
+  --text-dim: #555577;
+  --accent-red: #ff4444;
+  --accent-orange: #ff8800;
+  --accent-yellow: #ffcc00;
+  --accent-green: #00ff88;
+  --accent-cyan: #00ccff;
+  --accent-blue: #4488ff;
+  --accent-purple: #aa44ff;
+  --border: #222244;
+  --glow-red: 0 0 20px rgba(255,68,68,0.3);
+  --glow-green: 0 0 20px rgba(0,255,136,0.3);
+  --glow-cyan: 0 0 20px rgba(0,204,255,0.3);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+  font-size: 13px;
+  overflow-x: hidden;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-subtitle {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: var(--glow-green);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+@keyframes vpsPulse {
+  0% { transform: scale(1); box-shadow: 0 0 20px #00ff88, 0 0 40px #00ff8866; }
+  50% { transform: scale(1.3); box-shadow: 0 0 30px #00ff88, 0 0 60px #00ff8888, 0 0 90px #00ff8844; }
+  100% { transform: scale(1); box-shadow: 0 0 20px #00ff88, 0 0 40px #00ff8866; }
+}
+
+@keyframes vpsRing {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+@keyframes impactFlash {
+  0% { transform: scale(0.5); opacity: 1; }
+  50% { transform: scale(2.5); opacity: 0.6; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+.btn-refresh {
+  background: transparent;
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.btn-refresh:hover {
+  background: rgba(0,204,255,0.1);
+  box-shadow: var(--glow-cyan);
+}
+.btn-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Big counters */
+.counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  padding: 15px 20px;
+}
+
+.counter-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: center;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.counter-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-cyan);
+}
+
+.counter-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.counter-value.red { color: var(--accent-red); }
+.counter-value.orange { color: var(--accent-orange); }
+.counter-value.cyan { color: var(--accent-cyan); }
+.counter-value.green { color: var(--accent-green); }
+.counter-value.yellow { color: var(--accent-yellow); }
+.counter-value.purple { color: var(--accent-purple); }
+
+.counter-label {
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* Main grid */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 15px;
+  padding: 0 20px 20px;
+}
+
+@media (max-width: 1200px) {
+  .main-grid { grid-template-columns: 1fr; }
+}
+
+/* Map */
+.map-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 550px;
+  position: relative;
+}
+
+/* Attack counter overlay on map */
+.map-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 999;
+  background: rgba(10,10,26,0.85);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  pointer-events: none;
+}
+.map-overlay .live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-red);
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: pulse 1s infinite;
+}
+
+/* Projectile trail glow */
+.projectile-trail {
+  filter: blur(1px);
+}
+
+#map {
+  width: 100%;
+  height: 550px;
+}
+
+.leaflet-container { background: var(--bg-primary) !important; }
+
+/* Sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--accent-cyan);
+}
+
+.card-body {
+  padding: 12px 14px;
+}
+
+/* Country list */
+.country-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(34,34,68,0.5);
+}
+.country-item:last-child { border-bottom: none; }
+
+.country-flag { font-size: 18px; margin-right: 10px; }
+.country-name { flex: 1; font-size: 12px; }
+.country-count {
+  font-weight: 700;
+  color: var(--accent-red);
+  margin-right: 8px;
+}
+.country-bar {
+  width: 80px;
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.country-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s;
+}
+
+/* Attack log ticker */
+.ticker {
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 11px;
+}
+
+.ticker-entry {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(34,34,68,0.3);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ticker-time { color: var(--text-dim); white-space: nowrap; }
+.ticker-ip { color: var(--accent-orange); font-weight: 600; }
+.ticker-method { color: var(--text-secondary); }
+.ticker-flag { font-size: 14px; }
+
+/* Bottom grid */
+.bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 15px;
+  padding: 0 20px 20px;
+}
+
+/* Charts */
+.chart-container {
+  position: relative;
+  height: 250px;
+  padding: 10px;
+}
+
+/* Tables */
+.attack-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.attack-table th {
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+}
+
+.attack-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(34,34,68,0.5);
+}
+
+.attack-table tr:hover td {
+  background: rgba(0,204,255,0.03);
+}
+
+.ip-cell { color: var(--accent-orange); font-weight: 600; }
+.severity-high { color: var(--accent-red); }
+.severity-medium { color: var(--accent-orange); }
+.severity-low { color: var(--accent-yellow); }
+
+/* Education section */
+.edu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+
+.edu-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  transition: border-color 0.2s;
+}
+.edu-card:hover {
+  border-color: var(--accent-purple);
+}
+
+.edu-icon { font-size: 24px; margin-bottom: 8px; }
+.edu-method {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.edu-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.edu-how {
+  background: var(--bg-primary);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--accent-yellow);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.edu-defense {
+  font-size: 11px;
+  color: var(--accent-green);
+}
+.edu-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--accent-cyan);
+  text-decoration: none;
+  font-size: 11px;
+}
+.edu-link:hover { text-decoration: underline; }
+
+/* Section headers */
+.section-header {
+  padding: 15px 20px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* System info */
+.system-bar {
+  display: flex;
+  gap: 20px;
+  padding: 8px 20px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+}
+
+.system-item { display: flex; gap: 5px; align-items: center; }
+.system-label { color: var(--text-secondary); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-dim);
+}
+
+/* ===== RESPONSIVE: Tablet (768px and below) ===== */
+@media (max-width: 768px) {
+  body { font-size: 12px; }
+
+  .header {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .header-left { justify-content: center; }
+  .header-right { justify-content: center; gap: 10px; }
+  .header-title { font-size: 14px; }
+
+  .counters {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .counter-card { padding: 10px 8px; }
+  .counter-value { font-size: 22px; }
+  .counter-label { font-size: 9px; letter-spacing: 0.5px; }
+
+  .main-grid {
+    grid-template-columns: 1fr;
+    padding: 0 12px 12px;
+    gap: 10px;
+  }
+  .map-container { min-height: 350px; }
+  #map { height: 350px; }
+  .map-overlay {
+    flex-direction: column;
+    gap: 4px !important;
+    padding: 6px 8px !important;
+    font-size: 10px !important;
+  }
+
+  .bottom-grid {
+    grid-template-columns: 1fr;
+    padding: 0 12px 12px;
+    gap: 10px;
+  }
+
+  .edu-grid {
+    grid-template-columns: 1fr;
+    padding: 0 12px 12px;
+    gap: 10px;
+  }
+
+  .chart-container { height: 220px; }
+
+  .section-header {
+    padding: 12px 12px 6px;
+    font-size: 11px;
+  }
+
+  .system-bar {
+    gap: 8px 16px;
+    padding: 8px 12px;
+    font-size: 10px;
+  }
+
+  /* Table scroll on mobile */
+  .attack-table { font-size: 10px; }
+  .attack-table th, .attack-table td { padding: 5px 6px; }
+
+  .ticker { max-height: 160px; }
+  .ticker-entry { font-size: 10px; flex-wrap: wrap; gap: 4px; }
+
+  .country-bar { width: 50px; }
+
+  .edu-card { padding: 12px; }
+  .edu-method { font-size: 13px; }
+}
+
+/* ===== RESPONSIVE: Phone (480px and below) ===== */
+@media (max-width: 480px) {
+  .counters {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    padding: 8px;
+  }
+  .counter-value { font-size: 20px; }
+  .counter-label { font-size: 8px; }
+
+  .main-grid, .bottom-grid, .edu-grid { padding: 0 8px 8px; }
+
+  .map-container { min-height: 280px; }
+  #map { height: 280px; }
+
+  .chart-container { height: 200px; }
+
+  /* Hide org column on small phones */
+  .attack-table th:nth-child(4),
+  .attack-table td:nth-child(4) { display: none; }
+
+  .card-header { padding: 8px 10px; }
+  .card-body { padding: 8px 10px; }
+  .card-title { font-size: 11px; }
+
+  .user-bar-name { width: 60px; font-size: 10px; }
+  .user-bar-fill { font-size: 9px; }
+
+  .system-bar {
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10px;
+  }
+
+  .footer { font-size: 9px; padding: 10px; }
+}
+
+/* Arc animation */
+.attack-arc {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawArc 2s ease-in-out forwards;
+}
+@keyframes drawArc {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Severity badge */
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-critical { background: rgba(255,68,68,0.2); color: var(--accent-red); }
+.badge-high { background: rgba(255,136,0,0.2); color: var(--accent-orange); }
+.badge-medium { background: rgba(255,204,0,0.2); color: var(--accent-yellow); }
+.badge-low { background: rgba(0,204,255,0.2); color: var(--accent-cyan); }
+
+/* Top users chart */
+.user-bar-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.user-bar-name {
+  width: 80px;
+  text-align: right;
+  padding-right: 8px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-bar-track {
+  flex: 1;
+  height: 16px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.user-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  transition: width 0.5s;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 15px;
+  color: var(--text-dim);
+  font-size: 10px;
+  border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div class="header-title">VPS SECURITY DASHBOARD</div>
+      <div class="header-subtitle">your-vps-hostname.example.com | CrowdSec + Fail2ban + UFW</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    <span id="lastUpdate" style="color:var(--text-dim);font-size:11px;">Loading...</span>
+    <button class="btn-refresh" onclick="refreshData()" id="btnRefresh">Refresh</button>
+  </div>
+</div>
+
+<!-- Big Counters (clickable) -->
+<div class="counters" id="counters">
+  <a href="/pages/attempts.html" class="counter-card" style="text-decoration:none;">
+    <div class="counter-value red" id="totalAttempts">--</div>
+    <div class="counter-label">SSH Attempts &rarr;</div>
+  </a>
+  <a href="/pages/attackers.html" class="counter-card" style="text-decoration:none;">
+    <div class="counter-value orange" id="uniqueAttackers">--</div>
+    <div class="counter-label">Unique Attackers &rarr;</div>
+  </a>
+  <a href="/pages/countries.html" class="counter-card" style="text-decoration:none;">
+    <div class="counter-value cyan" id="countriesCount">--</div>
+    <div class="counter-label">Countries &rarr;</div>
+  </a>
+  <a href="/pages/bans.html" class="counter-card" style="text-decoration:none;">
+    <div class="counter-value green" id="bannedCount">--</div>
+    <div class="counter-label">IPs Banned &rarr;</div>
+  </a>
+  <a href="/pages/bans.html" class="counter-card" style="text-decoration:none;">
+    <div class="counter-value yellow" id="crowdsecAlerts">--</div>
+    <div class="counter-label">CrowdSec Alerts &rarr;</div>
+  </a>
+  <a href="/pages/methods.html" class="counter-card" style="text-decoration:none;">
+    <div class="counter-value purple" id="ufwBlocked">--</div>
+    <div class="counter-label">UFW Blocked &rarr;</div>
+  </a>
+</div>
+
+<!-- Main: Map + Sidebar -->
+<div class="main-grid">
+  <div class="map-container">
+    <div class="map-overlay" style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="live-dot"></span>
+        <span style="color:var(--accent-red);font-weight:700;font-size:13px;">LIVE ATTACKS</span>
+      </div>
+      <div style="color:var(--text-dim);font-size:10px;">Real attack origins &rarr; Your VPS (Boston)</div>
+      <div id="impactCounter" style="color:var(--accent-orange);font-weight:700;font-size:12px;"></div>
+    </div>
+    <div id="map"></div>
+  </div>
+  <div class="sidebar">
+    <!-- Country rankings -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Top Attacking Countries</span>
+      </div>
+      <div class="card-body" id="countryList">
+        <div class="loading">Loading data...</div>
+      </div>
+    </div>
+    <!-- Live ticker -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Attacks</span>
+      </div>
+      <div class="card-body ticker" id="ticker">
+        <div class="loading">Loading data...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="section-header">Attack Analytics</div>
+<div class="bottom-grid">
+  <!-- Methods chart -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Attack Methods</span>
+    </div>
+    <div class="chart-container">
+      <canvas id="methodsChart"></canvas>
+    </div>
+  </div>
+  <!-- Timeline chart -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Attack Timeline (hourly)</span>
+    </div>
+    <div class="chart-container">
+      <canvas id="timelineChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-grid">
+  <!-- Top attackers table -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Top Attackers</span>
+    </div>
+    <div style="max-height:350px;overflow-y:auto;">
+      <table class="attack-table" id="attackerTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>IP Address</th>
+            <th>Location</th>
+            <th>Organization</th>
+            <th>Attempts</th>
+          </tr>
+        </thead>
+        <tbody id="attackerTableBody">
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- Top usernames -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Most Targeted Usernames</span>
+    </div>
+    <div class="card-body" id="usernameChart">
+    </div>
+  </div>
+</div>
+
+<!-- Education section -->
+<div class="section-header">Attack Methods Explained</div>
+<div class="edu-grid" id="eduGrid">
+</div>
+
+<!-- System bar -->
+<div class="system-bar" id="systemBar">
+  <div class="system-item"><span class="system-label">Uptime:</span> <span id="sysUptime">--</span></div>
+  <div class="system-item"><span class="system-label">RAM:</span> <span id="sysRam">--</span></div>
+  <div class="system-item"><span class="system-label">Disk:</span> <span id="sysDisk">--</span></div>
+  <div class="system-item"><span class="system-label">Load:</span> <span id="sysLoad">--</span></div>
+  <div class="system-item"><span class="system-label">Containers:</span> <span id="sysContainers">--</span></div>
+</div>
+
+<div class="footer">
+  VPS Security Dashboard | CrowdSec + Fail2ban + UFW | Tailscale-only access<br>
+  Data updates hourly via cron | Click "Refresh" for live update
+</div>
+
+<script>
+// Globals
+let map, markersLayer, arcsLayer;
+let methodsChart, timelineChart;
+let data = null;
+
+// Color palette
+const COLORS = {
+  red: '#ff4444', orange: '#ff8800', yellow: '#ffcc00',
+  green: '#00ff88', cyan: '#00ccff', blue: '#4488ff', purple: '#aa44ff'
+};
+
+const METHOD_COLORS = {
+  'SSH Brute Force (password)': COLORS.red,
+  'SSH Invalid User': COLORS.orange,
+  'SSH Connection Probe': COLORS.cyan,
+  'SSH Pre-auth Disconnect': COLORS.yellow,
+  'Port Scanning': COLORS.purple,
+  'HTTP Exploit Scanning': COLORS.blue,
+};
+
+const SEVERITY_MAP = {
+  'SSH Brute Force (password)': 'high',
+  'SSH Invalid User': 'medium',
+  'SSH Connection Probe': 'low',
+  'SSH Pre-auth Disconnect': 'low',
+};
+
+// Initialize map
+function initMap() {
+  map = L.map('map', {
+    center: [25, 10],
+    zoom: 2,
+    minZoom: 2,
+    maxZoom: 10,
+    zoomControl: true,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+  arcsLayer = L.layerGroup().addTo(map);
+}
+
+// Animate number counter
+function animateCounter(el, target) {
+  const start = parseInt(el.textContent) || 0;
+  const duration = 800;
+  const startTime = Date.now();
+
+  function update() {
+    const progress = Math.min((Date.now() - startTime) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(start + (target - start) * eased).toLocaleString();
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+// === ANIMATED ATTACK MAP ===
+let animationRunning = false;
+let projectileMarkers = [];
+let attackQueue = [];
+let impactRings = [];
+let impactCount = 0;
+
+// Generate curved arc points between two coordinates
+function generateArc(fromLat, fromLon, toLat, toLon, numPoints) {
+  const points = [];
+  const dx = toLon - fromLon;
+  const dy = toLat - fromLat;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  // Curve offset perpendicular to the line
+  const curveHeight = dist * 0.2;
+
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    const lat = fromLat + (toLat - fromLat) * t;
+    const lon = fromLon + (toLon - fromLon) * t;
+    // Parabolic bulge
+    const bulge = curveHeight * Math.sin(t * Math.PI);
+    // Offset perpendicular (approximate by adding to lat)
+    const angle = Math.atan2(dy, dx);
+    points.push([
+      lat + bulge * Math.cos(angle + Math.PI/2) * 0.3,
+      lon + bulge * Math.sin(angle + Math.PI/2) * 0.3
+    ]);
+  }
+  return points;
+}
+
+// Projectile color palette (fallback for random use)
+const PROJECTILE_COLORS = [
+  '#ff4444', '#ff6622', '#ff8800', '#ffaa00', '#ffcc00',
+  '#ff2288', '#ff44aa', '#cc44ff', '#8844ff', '#4488ff',
+  '#00ccff', '#00ffcc', '#44ff88',
+];
+
+// Per-country persistent color — makes each nation recognizable across cycles
+const COUNTRY_COLORS = {
+  // Americas — greens/limes
+  US:'#44ff88', CA:'#66ffaa', MX:'#aaff44', BR:'#22ff66', AR:'#88ff44',
+  CO:'#44ffbb', CL:'#66ff66', HN:'#88ffaa', DO:'#aaff88', PA:'#66ffcc',
+  GT:'#44ff66', VE:'#aaff22', PE:'#66ffaa', EC:'#33ff88', CR:'#aaff66',
+  // Europe — blues/cyans
+  RU:'#4488ff', DE:'#44aaff', FR:'#44ccff', NL:'#6699ff', GB:'#8888ff',
+  PL:'#6677ff', UA:'#4466ff', RO:'#44aadd', SE:'#5599ff', FI:'#4477ff',
+  BE:'#88aaff', IT:'#6688ff', ES:'#5577ff', EE:'#44bbff', DK:'#44ccdd',
+  LT:'#5566ff', LV:'#4488ee', CH:'#77aaff', AT:'#6699ee', PT:'#55aaff',
+  GR:'#5588ff', HR:'#4477ee', CZ:'#6688ee', HU:'#7788ff', BG:'#5566ee',
+  RS:'#4466dd', SK:'#7799ff', SI:'#5577ee', MD:'#6677ff', BY:'#4455ee',
+  // Asia — reds/oranges
+  CN:'#ff4444', JP:'#ff6633', KR:'#ff8833', VN:'#ffaa33', TW:'#ff5555',
+  HK:'#ff4466', SG:'#ff33aa', IN:'#ff3355', ID:'#ff5544', TH:'#ff6622',
+  PK:'#ff2244', BD:'#ff3333', MY:'#ff4477', MM:'#ff5533', PH:'#ff6644',
+  KH:'#ffaa44', LA:'#ff8844', MN:'#ff6633', NP:'#ff4433',
+  // Middle East — purples/magentas
+  TR:'#cc44ff', IL:'#dd44ff', SA:'#bb44ff', IR:'#aa33ff', AE:'#cc33ff',
+  IQ:'#bb33ff', JO:'#aa44ff', LB:'#cc55ff', KW:'#bb55ff', QA:'#aa55ff',
+  OM:'#dd55ff', YE:'#bb44ee', SY:'#aa44ee', BH:'#cc66ff',
+  // Central Asia
+  KZ:'#ff44cc', UZ:'#ff44dd', GE:'#ff33cc', AZ:'#ff55cc', AM:'#ff44bb',
+  // Africa — magentas/pinks
+  EG:'#ff44bb', MA:'#ff55cc', NG:'#ff33bb', ZA:'#ff44aa', KE:'#ff55bb',
+  TZ:'#ff33aa', TN:'#ff44cc', DZ:'#ff55dd', ET:'#ff33bb', GH:'#ff44bb',
+  // Oceania — teals
+  AU:'#00ffcc', NZ:'#00ffee',
+};
+
+// Create a glowing missile marker — bigger, brighter
+function createProjectile(color) {
+  return L.divIcon({
+    html: `<div style="
+      width:10px;height:10px;
+      background: radial-gradient(circle, white 0%, ${color} 40%, transparent 70%);
+      border-radius:50%;
+      box-shadow: 0 0 8px ${color}, 0 0 20px ${color}, 0 0 40px ${color};
+      filter: brightness(1.5);
+    "></div>`,
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+    className: ''
+  });
+}
+
+// Animate a single projectile along an arc
+function fireProjectile(arcPoints, color, duration, onImpact) {
+  const marker = L.marker(arcPoints[0], {
+    icon: createProjectile(color),
+    interactive: false,
+    zIndexOffset: 1000,
+  }).addTo(markersLayer);
+
+  // Trail effect - bright glowing tail behind missile
+  const trail = L.polyline([], {
+    color: color,
+    weight: 3,
+    opacity: 0.8,
+    className: 'projectile-trail',
+  }).addTo(arcsLayer);
+  // Second thicker glow trail
+  const trailGlow = L.polyline([], {
+    color: color,
+    weight: 6,
+    opacity: 0.2,
+  }).addTo(arcsLayer);
+
+  const startTime = Date.now();
+  const trailPoints = [];
+
+  function animate() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease-in for acceleration effect
+    const eased = progress < 0.5
+      ? 2 * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+    const idx = Math.min(Math.floor(eased * (arcPoints.length - 1)), arcPoints.length - 1);
+    const pos = arcPoints[idx];
+    marker.setLatLng(pos);
+
+    // Update trail (longer tail for more visible streaks)
+    trailPoints.push(pos);
+    if (trailPoints.length > 14) trailPoints.shift();
+    trail.setLatLngs(trailPoints);
+    trailGlow.setLatLngs(trailPoints);
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // Impact! Remove projectile and trails
+      markersLayer.removeLayer(marker);
+      arcsLayer.removeLayer(trail);
+      arcsLayer.removeLayer(trailGlow);
+      if (onImpact) onImpact();
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// Impact explosion at VPS — multiple expanding rings + flash
+function showImpact(lat, lon, color) {
+  // Inner bright flash
+  const flash = L.circleMarker([lat, lon], {
+    radius: 4,
+    color: '#ffffff',
+    fillColor: '#ffffff',
+    fillOpacity: 0.9,
+    weight: 0,
+    interactive: false,
+  }).addTo(markersLayer);
+
+  // Outer colored ring
+  const ring = L.circleMarker([lat, lon], {
+    radius: 5,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.5,
+    weight: 2,
+    interactive: false,
+  }).addTo(markersLayer);
+
+  // Second delayed ring
+  const ring2 = L.circleMarker([lat, lon], {
+    radius: 3,
+    color: color,
+    fillColor: 'transparent',
+    fillOpacity: 0,
+    weight: 2,
+    opacity: 0.6,
+    interactive: false,
+  }).addTo(markersLayer);
+
+  let frame = 0;
+  const animate = setInterval(() => {
+    frame++;
+    // Flash shrinks fast
+    if (frame < 8) {
+      flash.setRadius(4 - frame * 0.4);
+      flash.setStyle({ fillOpacity: 0.9 - frame * 0.1 });
+    } else if (frame === 8) {
+      markersLayer.removeLayer(flash);
+    }
+    // Ring 1 expands
+    const r1 = 5 + frame * 2;
+    const o1 = Math.max(0, 0.5 - frame * 0.025);
+    ring.setRadius(r1);
+    ring.setStyle({ fillOpacity: o1, opacity: o1 });
+    // Ring 2 expands slower
+    const r2 = 3 + frame * 1.2;
+    const o2 = Math.max(0, 0.6 - frame * 0.03);
+    ring2.setRadius(r2);
+    ring2.setStyle({ opacity: o2 });
+
+    if (frame > 20) {
+      clearInterval(animate);
+      markersLayer.removeLayer(ring);
+      markersLayer.removeLayer(ring2);
+      try { markersLayer.removeLayer(flash); } catch(e) {}
+    }
+  }, 25);
+}
+
+// Get deterministic color for a country code
+function getCountryColor(cc) {
+  if (COUNTRY_COLORS[cc]) return COUNTRY_COLORS[cc];
+  // Fallback: hash country code into palette
+  const h = (cc.charCodeAt(0) * 31 + (cc.charCodeAt(1) || 0)) % PROJECTILE_COLORS.length;
+  return PROJECTILE_COLORS[h];
+}
+
+// Main animation loop — round-robin through ALL countries so every one is visible
+function startAttackAnimation(attackers, vpsLat, vpsLon) {
+  if (animationRunning) return;
+  animationRunning = true;
+
+  // Group by country — one representative per country (highest-attempts IP)
+  const byCountry = {};
+  attackers.filter(a => a.lat && a.lon).forEach(a => {
+    const cc = a.country || '??';
+    if (!byCountry[cc] || a.attempts > byCountry[cc].attempts) {
+      byCountry[cc] = a;
+    }
+  });
+
+  // Build ordered country list (sorted by total attacks desc so active countries fire first in each cycle)
+  const countries = Object.values(byCountry).sort((a, b) => b.attempts - a.attempts);
+  if (!countries.length) return;
+
+  // Pre-compute arcs and assign country color — each country keeps the same color forever
+  const countryArcs = countries.map(a => ({
+    ...a,
+    color: getCountryColor(a.country || '??'),
+    arc: generateArc(a.lat, a.lon, vpsLat, vpsLon, 50),
+  }));
+
+  let idx = 0;
+
+  function fireNext() {
+    if (!animationRunning) return;
+
+    const attacker = countryArcs[idx % countryArcs.length];
+    idx++;
+
+    // Travel time: 1.0–2.5s (far countries a bit slower for realism)
+    const duration = 1000 + Math.random() * 1500;
+
+    fireProjectile(attacker.arc, attacker.color, duration, () => {
+      showImpact(vpsLat, vpsLon, attacker.color);
+      impactCount++;
+      const el = document.getElementById('impactCounter');
+      if (el) el.textContent = `Impacts: ${impactCount}`;
+    });
+
+    // After one full cycle, brief pause before restarting
+    const isEndOfCycle = (idx % countryArcs.length === 0);
+    const delay = isEndOfCycle
+      ? 800 + Math.random() * 400        // short pause between cycles
+      : 120 + Math.random() * 130;       // ~120-250ms between each country — fast enough to see action
+    setTimeout(fireNext, delay);
+  }
+
+  // Stagger first cycle: fire each country with a small head start so they don't all launch at once
+  countryArcs.forEach((attacker, i) => {
+    setTimeout(() => {
+      if (!animationRunning) return;
+      fireProjectile(attacker.arc, attacker.color, 1200 + Math.random() * 1000, () => {
+        showImpact(vpsLat, vpsLon, attacker.color);
+      });
+    }, i * 180);
+  });
+
+  // Start the main loop after the initial stagger finishes
+  setTimeout(fireNext, countryArcs.length * 180 + 500);
+}
+
+function stopAttackAnimation() {
+  animationRunning = false;
+}
+
+// Draw static elements + start animation
+function drawArcs(attackers, vpsLat, vpsLon) {
+  stopAttackAnimation();
+  arcsLayer.clearLayers();
+  markersLayer.clearLayers();
+
+  // === VPS MARKER — BOSTON, US — Very visible ===
+
+  // Outer pulsing ring (large, animated)
+  const vpsRingOuter = L.circleMarker([vpsLat, vpsLon], {
+    radius: 30,
+    color: COLORS.green,
+    fillColor: COLORS.green,
+    fillOpacity: 0.05,
+    weight: 1,
+    opacity: 0.3,
+    interactive: false,
+  }).addTo(markersLayer);
+
+  // Animate the outer ring pulsing
+  let ringPhase = 0;
+  setInterval(() => {
+    ringPhase += 0.05;
+    const r = 30 + Math.sin(ringPhase) * 10;
+    const o = 0.15 + Math.sin(ringPhase) * 0.1;
+    vpsRingOuter.setRadius(r);
+    vpsRingOuter.setStyle({ opacity: o, fillOpacity: o * 0.3 });
+  }, 50);
+
+  // Middle glow ring
+  L.circleMarker([vpsLat, vpsLon], {
+    radius: 16,
+    color: COLORS.green,
+    fillColor: COLORS.green,
+    fillOpacity: 0.1,
+    weight: 2,
+    opacity: 0.4,
+    interactive: false,
+  }).addTo(markersLayer);
+
+  // Main VPS icon — big shield with label
+  const vpsIcon = L.divIcon({
+    html: `
+      <div style="position:relative;width:44px;height:58px;">
+        <div style="
+          width:36px;height:36px;
+          background: radial-gradient(circle, #00ff88cc, #00ff8844);
+          border: 3px solid #00ff88;
+          border-radius:50%;
+          box-shadow: 0 0 20px #00ff88, 0 0 40px #00ff8866, 0 0 60px #00ff8833;
+          animation: vpsPulse 2s ease-in-out infinite;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto;
+        "><span style="font-size:18px;filter:drop-shadow(0 0 4px #00ff88);">&#x1f6e1;</span></div>
+        <div style="
+          text-align:center;
+          margin-top:3px;
+          font-family: monospace;
+          font-size:10px;
+          font-weight:900;
+          color:#00ff88;
+          text-shadow: 0 0 8px #00ff88, 0 0 16px #00ff8866;
+          white-space:nowrap;
+          letter-spacing: 1px;
+        ">BOSTON, US</div>
+      </div>
+    `,
+    iconSize: [44, 58],
+    iconAnchor: [22, 29],
+    className: ''
+  });
+  L.marker([vpsLat, vpsLon], {icon: vpsIcon, zIndexOffset: 1000})
+    .bindPopup(`
+      <div style="font-family:monospace;font-size:12px;text-align:center;padding:4px;">
+        <b style="color:${COLORS.green};font-size:16px;">YOUR VPS</b><br>
+        <b style="font-size:13px;">your-vps-hostname.example.com</b><br>
+        <span style="color:${COLORS.cyan};font-size:13px;">${data.vps.ip}</span><br>
+        <span style="color:var(--text-secondary)">Boston, Massachusetts, US</span><br>
+        <span style="color:var(--text-secondary)">Hostinger KVM</span><br><br>
+        <span style="color:${COLORS.green}">&#x1f6e1; CrowdSec + Fail2ban + UFW</span>
+      </div>
+    `)
+    .addTo(markersLayer);
+
+  // Group attackers by country for cleaner map — one marker per country
+  const byCountry = {};
+  attackers.filter(a => a.lat && a.lon).forEach(a => {
+    const cc = a.country || '??';
+    if (!byCountry[cc]) {
+      byCountry[cc] = { ...a, totalAttempts: 0, ipCount: 0 };
+    }
+    byCountry[cc].totalAttempts += a.attempts;
+    byCountry[cc].ipCount += 1;
+    // Keep coords of the most-active IP
+    if (a.attempts > (byCountry[cc].attempts || 0)) {
+      byCountry[cc].lat = a.lat;
+      byCountry[cc].lon = a.lon;
+      byCountry[cc].attempts = a.attempts;
+    }
+  });
+
+  Object.values(byCountry).forEach((a) => {
+    const cc = a.country || '??';
+    const color = getCountryColor(cc);
+    const totalAttempts = a.totalAttempts || a.attempts || 1;
+
+    // Radius based on total country attacks (log scale so small countries still visible)
+    const radius = Math.max(6, Math.min(24, Math.log10(totalAttempts + 1) * 7));
+
+    // Country origin circle — pulsing glow effect
+    const circle = L.circleMarker([a.lat, a.lon], {
+      radius: radius,
+      color: color,
+      fillColor: color,
+      fillOpacity: 0.25,
+      weight: 2,
+      opacity: 0.85,
+    }).addTo(markersLayer);
+
+    // Smaller inner bright dot
+    L.circleMarker([a.lat, a.lon], {
+      radius: Math.max(3, radius * 0.4),
+      color: color,
+      fillColor: '#ffffff',
+      fillOpacity: 0.9,
+      weight: 0,
+      interactive: false,
+    }).addTo(markersLayer);
+
+    const flag = a.country && a.country.length === 2
+      ? String.fromCodePoint(0x1F1E6 + a.country.charCodeAt(0) - 65) +
+        String.fromCodePoint(0x1F1E6 + a.country.charCodeAt(1) - 65)
+      : '🏴';
+
+    circle.bindPopup(`
+      <div style="font-family:monospace;font-size:12px;">
+        <b style="color:${color};font-size:15px;">${flag} ${a.country_name || cc}</b><br>
+        ${a.city ? '<span style="color:#aaa">' + a.city + '</span><br>' : ''}
+        <br>
+        <span style="color:${color};font-size:13px;font-weight:bold;">${totalAttempts.toLocaleString()} ataques</span><br>
+        <span style="color:#888;">${a.ipCount} IP${a.ipCount > 1 ? 's' : ''} únicas</span><br>
+        ${a.org ? '<i style="color:#aaa">' + a.org + '</i>' : ''}
+      </div>
+    `);
+
+    // Static ghost arc — one per country, color-coded, slightly more visible
+    const arc = generateArc(a.lat, a.lon, vpsLat, vpsLon, 40);
+    L.polyline(arc, {
+      color: color,
+      weight: 1.5,
+      opacity: 0.2,
+      dashArray: '5,8',
+      interactive: false,
+    }).addTo(arcsLayer);
+  });
+
+  // Start animated projectiles
+  startAttackAnimation(attackers, vpsLat, vpsLon);
+}
+
+// Update counters
+function updateCounters(summary) {
+  animateCounter(document.getElementById('totalAttempts'), summary.total_ssh_attempts);
+  animateCounter(document.getElementById('uniqueAttackers'), summary.unique_attackers);
+  animateCounter(document.getElementById('countriesCount'), summary.countries_attacking);
+  animateCounter(document.getElementById('bannedCount'), summary.fail2ban_total_banned);
+  animateCounter(document.getElementById('crowdsecAlerts'), summary.crowdsec_alerts);
+  animateCounter(document.getElementById('ufwBlocked'), summary.total_ufw_blocked);
+}
+
+// Update country list
+function updateCountryList(countries) {
+  const el = document.getElementById('countryList');
+  if (!countries.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px;">No attack data yet</div>';
+    return;
+  }
+  const maxAttacks = countries[0].attacks;
+  el.innerHTML = countries.map(c => {
+    const pct = (c.attacks / maxAttacks * 100).toFixed(0);
+    const color = pct > 60 ? COLORS.red : pct > 30 ? COLORS.orange : COLORS.yellow;
+    return `
+      <div class="country-item">
+        <span class="country-flag">${c.flag}</span>
+        <span class="country-name">${c.name}</span>
+        <span class="country-count">${c.attacks.toLocaleString()}</span>
+        <div class="country-bar">
+          <div class="country-bar-fill" style="width:${pct}%;background:${color};"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Update ticker
+function updateTicker(attacks) {
+  const el = document.getElementById('ticker');
+  if (!attacks.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px;">No recent attacks</div>';
+    return;
+  }
+  // Show last 30 attacks, most recent first
+  const recent = attacks.slice(-30).reverse();
+  el.innerHTML = recent.map(a => {
+    const time = a.timestamp ? new Date(a.timestamp).toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit'}) : '--:--';
+    const severity = SEVERITY_MAP[a.method] || 'low';
+    return `
+      <div class="ticker-entry">
+        <span class="ticker-time">${time}</span>
+        <span class="ticker-ip">${a.ip}</span>
+        <span class="badge badge-${severity}">${severity}</span>
+        <span class="ticker-method">${a.method.replace('SSH ', '')}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// Methods doughnut chart
+function updateMethodsChart(methods) {
+  const ctx = document.getElementById('methodsChart').getContext('2d');
+  if (methodsChart) methodsChart.destroy();
+
+  const labels = methods.map(m => m.method.replace('SSH ', ''));
+  const values = methods.map(m => m.count);
+  const colors = methods.map(m => METHOD_COLORS[m.method] || COLORS.blue);
+
+  methodsChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors.map(c => c + '88'),
+        borderColor: colors,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: window.innerWidth <= 768 ? 'bottom' : 'right',
+          labels: { color: '#8888aa', font: { family: 'monospace', size: window.innerWidth <= 480 ? 9 : 11 }, padding: window.innerWidth <= 480 ? 6 : 12 }
+        },
+        tooltip: {
+          backgroundColor: '#161633',
+          titleColor: '#e0e0f0',
+          bodyColor: '#8888aa',
+          borderColor: '#222244',
+          borderWidth: 1,
+        }
+      },
+      cutout: '55%',
+    }
+  });
+}
+
+// Timeline line chart
+function updateTimelineChart(hourly) {
+  const ctx = document.getElementById('timelineChart').getContext('2d');
+  if (timelineChart) timelineChart.destroy();
+
+  const labels = hourly.map(h => {
+    const d = new Date(h.hour);
+    return d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', hour12:false});
+  });
+  const values = hourly.map(h => h.count);
+
+  timelineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Attacks/hour',
+        data: values,
+        borderColor: COLORS.cyan,
+        backgroundColor: COLORS.cyan + '20',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          ticks: { color: '#555577', font: { size: 10 }, maxRotation: 45, maxTicksLimit: 12 },
+          grid: { color: '#222244' },
+        },
+        y: {
+          ticks: { color: '#555577', font: { size: 10 } },
+          grid: { color: '#222244' },
+          beginAtZero: true,
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#161633',
+          titleColor: '#e0e0f0',
+          bodyColor: '#8888aa',
+          borderColor: '#222244',
+          borderWidth: 1,
+        }
+      }
+    }
+  });
+}
+
+// Attacker table
+function updateAttackerTable(topIps) {
+  const tbody = document.getElementById('attackerTableBody');
+  tbody.innerHTML = topIps.map((a, i) => {
+    const cc = a.country || '??';
+    const flag = a.flag || '';
+    const severity = a.attempts > 500 ? 'high' : a.attempts > 100 ? 'medium' : 'low';
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td class="ip-cell">${a.ip}</td>
+        <td>${flag} ${a.country_name || cc}${a.city ? ', ' + a.city : ''}</td>
+        <td style="color:var(--text-dim)">${a.org || a.asn || '-'}</td>
+        <td><span class="severity-${severity}">${a.attempts.toLocaleString()}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// Username bar chart (horizontal)
+function updateUsernameChart(topUsers) {
+  const el = document.getElementById('usernameChart');
+  if (!topUsers.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px;">No data</div>';
+    return;
+  }
+  const maxAttempts = topUsers[0].attempts;
+  const barColors = [COLORS.red, COLORS.orange, COLORS.yellow, COLORS.cyan, COLORS.blue,
+                     COLORS.purple, COLORS.green, COLORS.red, COLORS.orange, COLORS.yellow];
+  el.innerHTML = topUsers.map((u, i) => {
+    const pct = (u.attempts / maxAttempts * 100).toFixed(0);
+    const color = barColors[i % barColors.length];
+    return `
+      <div class="user-bar-item">
+        <span class="user-bar-name">${u.user}</span>
+        <div class="user-bar-track">
+          <div class="user-bar-fill" style="width:${pct}%;background:${color}55;color:${color};">
+            ${u.attempts.toLocaleString()}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Technique page mapping
+const TECHNIQUE_PAGES = {
+  'SSH Brute Force': '/pages/techniques/ssh-brute-force.html',
+  'SSH Invalid User': '/pages/techniques/ssh-invalid-user.html',
+  'SSH Pre-auth Disconnect': '/pages/techniques/ssh-connection-probe.html',
+  'SSH Connection Probe': '/pages/techniques/ssh-connection-probe.html',
+  'HTTP Exploit Scanning': '/pages/techniques/ssh-cve-exploitation.html',
+  'Credential Stuffing': '/pages/techniques/credential-stuffing.html',
+  'Port Scanning': '/pages/techniques/port-scanning.html',
+};
+
+// Education cards - now with internal links
+function updateEducation(explanations) {
+  const el = document.getElementById('eduGrid');
+  el.innerHTML = explanations.map(e => {
+    const internalPage = TECHNIQUE_PAGES[e.method] || '/pages/methods.html';
+    return `
+    <a href="${internalPage}" class="edu-card" style="text-decoration:none;display:block;">
+      <div class="edu-icon">${e.icon}</div>
+      <div class="edu-method">
+        ${e.method}
+        <span class="badge badge-${e.severity}" style="margin-left:8px;">${e.severity}</span>
+      </div>
+      <div class="edu-desc">${e.description}</div>
+      <div class="edu-how"><b>How it works:</b> ${e.how_it_works}</div>
+      <div class="edu-defense"><b>Your defenses:</b> ${e.defense}</div>
+      <div style="margin-top:8px;">
+        <span class="edu-link">Full details &amp; MITRE ATT&CK &rarr;</span>
+      </div>
+    </a>`;
+  }).join('');
+}
+
+// System bar
+function updateSystemBar(system) {
+  if (!system) return;
+  document.getElementById('sysUptime').textContent = system.uptime || '--';
+  document.getElementById('sysRam').textContent = system.ram_used_mb ? `${system.ram_used_mb}/${system.ram_total_mb}MB (${system.ram_percent}%)` : '--';
+  document.getElementById('sysDisk').textContent = system.disk_used ? `${system.disk_used}/${system.disk_total} (${system.disk_percent})` : '--';
+  document.getElementById('sysLoad').textContent = system.load ? system.load.join(', ') : '--';
+  document.getElementById('sysContainers').textContent = system.containers ? system.containers.map(c => c.name).join(', ') : '--';
+}
+
+// Load data
+async function loadData() {
+  try {
+    const resp = await fetch('data/attacks.json?t=' + Date.now());
+    data = await resp.json();
+
+    // Update timestamp
+    const dt = new Date(data.generated_at);
+    document.getElementById('lastUpdate').textContent = 'Updated: ' + dt.toLocaleString();
+
+    // Update all components
+    updateCounters(data.summary);
+    updateCountryList(data.countries);
+    updateTicker(data.attacks || []);
+    drawArcs(data.attackers, data.vps.lat, data.vps.lon);
+    updateMethodsChart(data.methods);
+    updateTimelineChart(data.hourly_timeline);
+    updateAttackerTable(data.top_ips);
+    updateUsernameChart(data.top_users);
+    updateEducation(data.attack_explanations);
+    updateSystemBar(data.system);
+
+  } catch (e) {
+    console.error('Failed to load data:', e);
+    document.getElementById('lastUpdate').textContent = 'Error loading data';
+  }
+}
+
+// Refresh button - regenerate data then reload everything
+async function refreshData() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  btn.textContent = 'Collecting data...';
+
+  try {
+    // Tell server to re-run the data collector
+    await fetch('/api/refresh', { method: 'POST' });
+    btn.textContent = 'Loading...';
+    // Small delay to ensure file is written
+    await new Promise(r => setTimeout(r, 500));
+    // Reset animation
+    stopAttackAnimation();
+    impactCount = 0;
+    // Reload all data
+    await loadData();
+  } catch (e) {
+    // Fallback: just reload data
+    await loadData();
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Refresh';
+}
+
+// Init
+initMap();
+loadData();
+
+// Auto-refresh every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
